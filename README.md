@@ -13,7 +13,9 @@
 |---|---|
 
 Expose AWS Bedrock LLM Chat API via standard `sys:chat` message patterns.
+
 This plugin is part of a family of plugins that wrap LLM Chat APIs.
+
 Production Example: [Voxgig Podmind](https://github.com/voxgig/podmind)
 
 ## Install
