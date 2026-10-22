@@ -2,11 +2,6 @@
 
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
 
-import { Gubu } from 'gubu'
-
-
-const { Open, Default, One } = Gubu
-
 
 type BedrockChatOptions = {
   debug?: boolean,
@@ -29,7 +24,7 @@ function BedrockChat(this: any, options: BedrockChatOptions) {
       sys: 'chat',
       chat: 'bedrock',
     })
-    .message('submit:query', { query: String, chat: Default('') }, msgSubmitQuery)
+    .message('submit:query', { query: String, chat: seneca.valid.Default('') }, msgSubmitQuery)
     .message('invoke:model', { prompt: String, config: Object }, msgInvokeModel)
 
   seneca.prepare(prepare)
@@ -123,29 +118,30 @@ function BedrockChat(this: any, options: BedrockChatOptions) {
 
 
 
-// Default options.
-const defaults: BedrockChatOptions = {
+// Default options, built with the validator Seneca passes in: shape on
+// Seneca 4, Gubu on Seneca 3.
+const defaults = ({ valid }: { valid: any }): BedrockChatOptions => ({
   // TODO: Enable debug logging
   debug: false,
 
   // If true, translate sys:chat messages to sys:chat,chat:bedrock
   global: true,
 
-  bedrock: Open({
+  bedrock: valid.Open({
     region: 'us-east-1'
   }),
 
 
-  config: Open({
+  config: valid.Open({
     model: 'ai21.j2-ultra-v1',
-    modelSettings: Open({
-      temperature: One(Default(0.7), null),
-      region: One(Default('us-east-1'), null),
-      maxTokens: One(Default(1525), null),
-      topP: One(Default(1.0), null),
+    modelSettings: valid.Open({
+      temperature: valid.One(valid.Default(0.7), null),
+      region: valid.One(valid.Default('us-east-1'), null),
+      maxTokens: valid.One(valid.Default(1525), null),
+      topP: valid.One(valid.Default(1.0), null),
     }),
   }),
-}
+})
 
 
 Object.assign(BedrockChat, { defaults })

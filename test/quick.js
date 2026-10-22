@@ -12,7 +12,7 @@ async function run() {
   const seneca = Seneca({ legacy: false })
         .test('print')
         .use('promisify')
-        .use('entity')
+        .use('@seneca/entity')
         .use(BedrockChat)
   await seneca.ready()
 

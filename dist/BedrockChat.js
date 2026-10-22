@@ -2,8 +2,6 @@
 /* Copyright © 2024 Seneca Project Contributors, MIT License. */
 Object.defineProperty(exports, "__esModule", { value: true });
 const client_bedrock_runtime_1 = require("@aws-sdk/client-bedrock-runtime");
-const gubu_1 = require("gubu");
-const { Open, Default, One } = gubu_1.Gubu;
 function BedrockChat(options) {
     const seneca = this;
     let client;
@@ -12,7 +10,7 @@ function BedrockChat(options) {
         sys: 'chat',
         chat: 'bedrock',
     })
-        .message('submit:query', { query: String, chat: Default('') }, msgSubmitQuery)
+        .message('submit:query', { query: String, chat: seneca.valid.Default('') }, msgSubmitQuery)
         .message('invoke:model', { prompt: String, config: Object }, msgInvokeModel);
     seneca.prepare(prepare);
     if (options.global) {
@@ -78,25 +76,26 @@ function BedrockChat(options) {
         client = new client_bedrock_runtime_1.BedrockRuntimeClient(options.bedrock);
     }
 }
-// Default options.
-const defaults = {
+// Default options, built with the validator Seneca passes in: shape on
+// Seneca 4, Gubu on Seneca 3.
+const defaults = ({ valid }) => ({
     // TODO: Enable debug logging
     debug: false,
     // If true, translate sys:chat messages to sys:chat,chat:bedrock
     global: true,
-    bedrock: Open({
+    bedrock: valid.Open({
         region: 'us-east-1'
     }),
-    config: Open({
+    config: valid.Open({
         model: 'ai21.j2-ultra-v1',
-        modelSettings: Open({
-            temperature: One(Default(0.7), null),
-            region: One(Default('us-east-1'), null),
-            maxTokens: One(Default(1525), null),
-            topP: One(Default(1.0), null),
+        modelSettings: valid.Open({
+            temperature: valid.One(valid.Default(0.7), null),
+            region: valid.One(valid.Default('us-east-1'), null),
+            maxTokens: valid.One(valid.Default(1525), null),
+            topP: valid.One(valid.Default(1.0), null),
         }),
     }),
-};
+});
 Object.assign(BedrockChat, { defaults });
 exports.default = BedrockChat;
 if ('undefined' !== typeof module) {
