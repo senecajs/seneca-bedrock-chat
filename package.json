@@ -1,6 +1,6 @@
 {
   "name": "@seneca/bedrock-chat",
-  "version": "0.0.5",
+  "version": "0.1.0",
   "main": "dist/BedrockChat.js",
   "type": "commonjs",
   "types": "dist/BedrockChat.d.ts",
@@ -39,7 +39,9 @@
     "node": ">=14"
   },
   "devDependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1155.0",
     "@seneca/doc": "^8.0.0",
+    "@seneca/entity": "^29.0.0",
     "@seneca/maintain": "^0.1.0",
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.2",
@@ -48,16 +50,18 @@
     "esbuild-jest": "^0.5.0",
     "jest": "^29.7.0",
     "prettier": "3.3.1",
+    "seneca": "^4.0.0-rc5",
     "seneca-msg-test": "^4.1.0",
+    "seneca-promisify": "^3.7.2",
     "typescript": "^5.4.5"
   },
   "peerDependencies": {
     "@aws-sdk/client-bedrock-runtime": ">=3",
     "@aws-sdk/credential-provider-node": ">=3",
     "@opensearch-project/opensearch": ">=2",
+    "@seneca/entity": ">=29",
     "@seneca/entity-util": ">=3",
-    "seneca": ">=3||>=4.0.0-rc2",
-    "seneca-entity": ">=26",
+    "seneca": ">=3.38||>=4.0.0-rc5",
     "seneca-promisify": ">=3"
   }
 }

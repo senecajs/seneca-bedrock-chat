@@ -21,6 +21,67 @@ describe('BedrockChat', () => {
   })
 
 
+  test('defaults', async () => {
+    const seneca = await makeSeneca()
+    expect(seneca.find_plugin('BedrockChat').options).toMatchObject({
+      debug: false,
+      global: true,
+      bedrock: { region: 'us-east-1' },
+      config: {
+        model: 'ai21.j2-ultra-v1',
+        modelSettings: {
+          temperature: 0.7,
+          region: 'us-east-1',
+          maxTokens: 1525,
+          topP: 1.0,
+        },
+      },
+    })
+
+    const seneca1 = await makeSeneca({
+      bedrock: { region: 'eu-west-1' },
+      config: { modelSettings: { maxTokens: null, top_p: 0.9 } },
+    })
+    expect(seneca1.find_plugin('BedrockChat').options).toMatchObject({
+      bedrock: { region: 'eu-west-1' },
+      config: {
+        model: 'ai21.j2-ultra-v1',
+        modelSettings: {
+          temperature: 0.7,
+          maxTokens: null,
+          top_p: 0.9,
+        },
+      },
+    })
+  })
+
+
+  test('submit-query-rule', async () => {
+    const seneca = await makeSeneca()
+
+    // Answer invoke:model locally, so no AWS call is made.
+    const seen: any[] = []
+    seneca.message('sys:chat,chat:bedrock,invoke:model', async (msg: any) => {
+      seen.push(msg)
+      return { ok: true, answer: 'A' }
+    })
+
+    let res1 = await seneca.post('sys:chat,submit:query', { query: 'Q' })
+    expect(res1).toEqual({ ok: true, answer: 'A' })
+    expect(seen[0]).toMatchObject({
+      chat: 'bedrock',
+      query: 'Q',
+      prompt: 'Q',
+      config: { model: 'ai21.j2-ultra-v1' },
+    })
+
+    await expect(seneca.post('sys:chat,submit:query', {}))
+      .rejects.toMatchObject({ code: 'act_invalid_msg' })
+    await expect(seneca.post('sys:chat,submit:query', { query: 1 }))
+      .rejects.toMatchObject({ code: 'act_invalid_msg' })
+  })
+
+
   test('basic-query', async () => {
     if (!LOCAL) return;
 
@@ -108,7 +169,7 @@ async function makeSeneca(opts?: any) {
     // .test('print')
     .test()
     .use('promisify')
-    .use('entity')
+    .use('@seneca/entity')
     .use(BedrockChat, opts)
   await seneca.ready()
 
