@@ -1,5 +1,8 @@
 /* Copyright © 2024 Seneca Project Contributors, MIT License. */
 
+import { createServer, IncomingMessage, Server, ServerResponse } from 'node:http'
+import { AddressInfo } from 'node:net'
+
 import Seneca from 'seneca'
 // import SenecaMsgTest from 'seneca-msg-test'
 // import { Maintain } from '@seneca/maintain'
@@ -7,8 +10,11 @@ import Seneca from 'seneca'
 import BedrockChatDoc from '../src/BedrockChatDoc'
 import BedrockChat from '../src/BedrockChat'
 
-// NOTE: requires valid AWS_PROFILE environment variable
+// NOTE: the live tests (basic-query, model-query, model-json-query) call AWS
+// Bedrock, and need the AWS_PROFILE environment variable with Bedrock access.
+// They skip without it.
 const LOCAL = !!process.env.AWS_PROFILE
+const testLive = LOCAL ? test : test.skip
 
 
 describe('BedrockChat', () => {
@@ -82,8 +88,58 @@ describe('BedrockChat', () => {
   })
 
 
-  test('basic-query', async () => {
-    if (!LOCAL) return;
+  // The plugin builds its BedrockRuntimeClient from the bedrock option, so the
+  // InvokeModel call can go to a local stand-in of the Bedrock runtime API
+  // (POST /model/{modelId}/invoke), started here on an ephemeral port. It
+  // answers in the two response formats the plugin reads: AI21 Jurassic-2
+  // (completions, the default model) and Meta Llama (generation).
+  test('invoke-model-stub', async () => {
+    const calls: any[] = []
+    const stub = await startBedrockStub((modelId, body) => {
+      calls.push({ modelId, body })
+      return modelId.startsWith('meta.')
+        ? { generation: 'Llama answer.<|eot_id|> trailing' }
+        : { completions: [{ data: { text: 'Jurassic answer.' } }] }
+    })
+
+    try {
+      const bedrock = {
+        region: 'us-east-1',
+        endpoint: stub.url,
+        credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
+      }
+
+      const seneca = await makeSeneca({ bedrock })
+      const res1 = await seneca.post('sys:chat,submit:query', { query: 'Q1' })
+      expect(res1).toEqual({ ok: true, answer: 'Jurassic answer.' })
+      expect(calls[0]).toEqual({
+        modelId: 'ai21.j2-ultra-v1',
+        body: { maxTokens: 1525, temperature: 0.7, prompt: 'Q1', topP: 1 },
+      })
+
+      const seneca1 = await makeSeneca({
+        bedrock,
+        config: {
+          model: 'meta.llama3-8b-instruct-v1:0',
+          modelSettings: { maxTokens: null, topP: null },
+        },
+      })
+      const res2 = await seneca1.post('sys:chat,submit:query', { query: 'Q2' })
+      expect(res2).toEqual({ ok: true, answer: 'Llama answer.' })
+      expect(calls[1]).toEqual({
+        modelId: 'meta.llama3-8b-instruct-v1:0',
+        body: { temperature: 0.7, prompt: 'Q2' },
+      })
+
+      await seneca.close()
+      await seneca1.close()
+    } finally {
+      await stub.close()
+    }
+  })
+
+
+  testLive('basic-query', async () => {
 
     const seneca = await makeSeneca()
     let res1 = await seneca.post('sys:chat,submit:query', {
@@ -96,8 +152,7 @@ describe('BedrockChat', () => {
   }, 9999)
 
 
-  test('model-query', async () => {
-    if (!LOCAL) return;
+  testLive('model-query', async () => {
 
     const seneca = await makeSeneca({
       /*
@@ -125,8 +180,7 @@ what is devrel?
   }, 9999)
 
 
-  test('model-json-query', async () => {
-    if (!LOCAL) return;
+  testLive('model-json-query', async () => {
 
     const seneca = await makeSeneca({
       config: {
@@ -168,11 +222,39 @@ async function makeSeneca(opts?: any) {
   const seneca = Seneca({ legacy: false })
     // .test('print')
     .test()
-    .use('promisify')
-    .use('@seneca/entity')
     .use(BedrockChat, opts)
   await seneca.ready()
 
   return seneca
 }
 
+
+// A stand-in for the Bedrock runtime InvokeModel operation: the reply function
+// gets the model id and the JSON request body, and returns the JSON response body.
+async function startBedrockStub(
+  reply: (modelId: string, body: any) => any,
+): Promise<{ url: string; close: () => Promise<void> }> {
+  const server: Server = createServer(
+    (req: IncomingMessage, res: ServerResponse) => {
+      const chunks: Buffer[] = []
+      req.on('data', (c: Buffer) => chunks.push(c))
+      req.on('end', () => {
+        const m = (req.url || '').match(/^\/model\/([^/]+)\/invoke$/)
+        if ('POST' !== req.method || null == m) {
+          res.writeHead(404, { 'content-type': 'application/json' })
+          return res.end(JSON.stringify({ message: 'Not found' }))
+        }
+        const modelId = decodeURIComponent(m[1])
+        const body = JSON.parse(Buffer.concat(chunks).toString())
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify(reply(modelId, body)))
+      })
+    },
+  )
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
+  const port = (server.address() as AddressInfo).port
+  return {
+    url: 'http://127.0.0.1:' + port,
+    close: () => new Promise<void>((r) => server.close(() => r())),
+  }
+}

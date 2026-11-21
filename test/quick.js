@@ -1,5 +1,4 @@
 require('dotenv').config({path:'.env.local'})
-console.log(process.env) // remove this
 
 const Seneca = require('seneca')
 const BedrockChatDoc = require('../dist/BedrockChatDoc')
@@ -11,8 +10,6 @@ run()
 async function run() {
   const seneca = Seneca({ legacy: false })
         .test('print')
-        .use('promisify')
-        .use('@seneca/entity')
         .use(BedrockChat)
   await seneca.ready()
 
