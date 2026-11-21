@@ -1,6 +1,12 @@
 /* Copyright © 2024 Seneca Project Contributors, MIT License. */
 
-import { createServer, IncomingMessage, Server, ServerResponse } from 'node:http'
+import {
+  createServer,
+  Http2Server,
+  Http2ServerRequest,
+  Http2ServerResponse,
+  ServerHttp2Session,
+} from 'node:http2'
 import { AddressInfo } from 'node:net'
 
 import Seneca from 'seneca'
@@ -90,7 +96,9 @@ describe('BedrockChat', () => {
 
   // The plugin builds its BedrockRuntimeClient from the bedrock option, so the
   // InvokeModel call can go to a local stand-in of the Bedrock runtime API
-  // (POST /model/{modelId}/invoke), started here on an ephemeral port. It
+  // (POST /model/{modelId}/invoke), started here on an ephemeral port. The
+  // Bedrock runtime client sends its requests over HTTP/2, so the stand-in
+  // is an HTTP/2 server without TLS (the endpoint is http://). It
   // answers in the two response formats the plugin reads: AI21 Jurassic-2
   // (completions, the default model) and Meta Llama (generation).
   test('invoke-model-stub', async () => {
@@ -234,8 +242,9 @@ async function makeSeneca(opts?: any) {
 async function startBedrockStub(
   reply: (modelId: string, body: any) => any,
 ): Promise<{ url: string; close: () => Promise<void> }> {
-  const server: Server = createServer(
-    (req: IncomingMessage, res: ServerResponse) => {
+  const sessions = new Set<ServerHttp2Session>()
+  const server: Http2Server = createServer(
+    (req: Http2ServerRequest, res: Http2ServerResponse) => {
       const chunks: Buffer[] = []
       req.on('data', (c: Buffer) => chunks.push(c))
       req.on('end', () => {
@@ -251,10 +260,19 @@ async function startBedrockStub(
       })
     },
   )
+  server.on('session', (session: ServerHttp2Session) => {
+    sessions.add(session)
+    session.on('close', () => sessions.delete(session))
+  })
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()))
   const port = (server.address() as AddressInfo).port
   return {
     url: 'http://127.0.0.1:' + port,
-    close: () => new Promise<void>((r) => server.close(() => r())),
+    close: () =>
+      new Promise<void>((r) => {
+        // The client keeps its HTTP/2 session open, so end it here.
+        sessions.forEach((session) => session.destroy())
+        server.close(() => r())
+      }),
   }
 }
