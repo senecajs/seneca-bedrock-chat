@@ -24,14 +24,16 @@ Production Example: [Voxgig Podmind](https://github.com/voxgig/podmind)
 ## Install
 
 ```sh
-$ npm install @seneca/bedrock-chat
+$ npm install seneca@^4 @seneca/bedrock-chat @aws-sdk/client-bedrock-runtime
 ```
+
+Requires Seneca 4 and Node.js 24 or later.
 
 
 ## Quick Example
 
 ```js
-seneca.use('bedrock-chat')
+seneca.use('@seneca/bedrock-chat')
 
 let chatRes = await seneca.post('sys:chat,submit:query', {
   query: 'what is devrel?',
